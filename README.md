@@ -20,10 +20,15 @@ This repository is designed to lint code, scan code and deploy packaged code to 
     * CLOUD_RUN_SA
     * GOOGLE_CLOUD_PROJECT
     * SERVICE_NAME
+    * LAST_STABLE_VERSION_TAG
+    * LOG_LEVEL
+    * RUNNER
+    * SQL_LOG_LEVEL
+    * URL
  * Following repsository variables are created in each environment. 
-    * CODE_DIRECTORY
-    * LANGUAGE
-    * REGION
+    * SERVICE_ACCOUNT
+    * USERNAME
+    * WORKLOAD_IDENTITY_PROVIDER
 
 
 ## Deploying to DEV 
