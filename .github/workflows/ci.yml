@@ -1,0 +1,121 @@
+name: Continuous Integration (CI) Build for QA and Dev Environments
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+jobs:
+  #Runs when the pull request/push is sent to main branch
+  qa-liquibase-update:
+    name: QA Liquibase plan and Update
+    if: github.ref_name == 'main'
+    uses: ./.github/workflows/liquibase-ci.yml
+    secrets:
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      USERNAME: ${{ secrets.USERNAME }}
+    with:
+      environment: 'qa'
+      runner: 'ubuntu-latest'
+  qa-docker:
+    name: QA docker deploy
+    needs: qa-liquibase-update
+    if: github.ref_name == 'main' && needs.qa-liquibase-update.result == 'success'
+    uses: ./.github/workflows/_deployment.yaml
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+      security-events: write
+    with:
+      environment: 'qa'
+    secrets: inherit
+
+  qa-liquibase-rollback:
+    #Runs only when the qa-docker deploy job fails
+    name: QA liquibase rollback
+    uses: ./.github/workflows/liquibase-rollback.yml
+    if: failure() || cancelled()
+    needs: [qa-liquibase-update, qa-docker]
+    secrets:
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      USERNAME: ${{ secrets.USERNAME }}
+    with:
+      environment: 'qa'
+      runner: 'ubuntu-latest'
+
+  qa-liquibase-update-tag:
+      #Updates the tag variable in the github if the qa-docker deployment succeeds
+      name: QA Liquibase Update tag and repository variable
+      needs: [qa-liquibase-update, qa-docker]
+      if: github.ref_name == 'main' && github.event_name == 'push'
+      uses: ./.github/workflows/liquibase-tag.yml
+      secrets:
+        SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+        WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+        USERNAME: ${{ secrets.USERNAME }}
+        ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      with:
+        environment: 'qa'
+        runner: 'ubuntu-latest'
+        liquibase-tag: '${{ github.sha }}'
+
+
+  dev-liquibase-update:
+    #Runs when the pull request/push is sent to main branch
+    name: DEV Liquibase plan and Update
+    if: github.ref_name  == 'develop'
+    uses: ./.github/workflows/liquibase-ci.yml
+    secrets:
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      USERNAME: ${{ secrets.USERNAME }}
+    with:
+      environment: 'dev'
+      runner: 'ubuntu-latest'
+  dev-docker:
+    name: DEV docker deploy
+    needs: dev-liquibase-update
+    if: github.ref_name == 'develop'
+    uses: ./.github/workflows/_deployment.yaml
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+      security-events: write
+    with:
+      environment: 'dev'
+    secrets: inherit
+  dev-liquibase-rollback:
+     #Runs only when the qa-docker deploy job fails
+    name: Dev liquibase rollback
+    uses: ./.github/workflows/liquibase-rollback.yml
+    if: failure() || cancelled()
+    needs: [ dev-liquibase-update, dev-docker ]
+    secrets:
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      USERNAME: ${{ secrets.USERNAME }}
+    with:
+      environment: 'dev'
+      runner: 'ubuntu-latest'
+  dev-liquibase-update-tag:
+    #Updates the tag variable in the github if the qa-docker deployment succeeds
+    name: Dev Liquibase Update tag and repository variable
+    needs: [ dev-liquibase-update, dev-docker ]
+    if: github.ref_name == 'develop' && github.event_name == 'push'
+    uses: ./.github/workflows/liquibase-tag.yml
+    secrets:
+      SERVICE_ACCOUNT: ${{ secrets.SERVICE_ACCOUNT }}
+      WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+      USERNAME: ${{ secrets.USERNAME }}
+      ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+    with:
+      environment: 'dev'
+      runner: 'ubuntu-latest'
+      liquibase-tag: '${{ github.sha }}'
